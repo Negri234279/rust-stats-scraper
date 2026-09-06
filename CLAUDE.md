@@ -25,14 +25,18 @@ rendered table.
 2. **Alias filter** — keep only entries whose `alias` starts with `--`
    (e.g. `--Vaga`). Entries with other prefixes (e.g. `**Pelos`) are dropped.
    Lives in `src/steam/aliasFilter.ts`.
-3. **Steam resolve** — each surviving SteamID64 → Steam persona name via the
-   official **Steam Web API** (`ISteamUser/GetPlayerSummaries`). Needs
-   `STEAM_API_KEY`. Lives in `src/steam/resolver.ts`.
-4. **Provider scrape** — Playwright opens the provider (Moose), selects
-   `server / week / tab`, and for each persona name filters the table and extracts
-   that player's row. Lives in `src/providers/<name>/`.
-5. **UI** — the Express server returns the aggregated rows; the frontend renders
-   the resources table. Lives in `src/server.ts` + `public/`.
+3. **Provider scrape** — Playwright opens the provider (Moose), selects
+   `server / week / tab`, and for each player searches the grid **by SteamID64**
+   and extracts their row. Moose's search matches SteamID64 directly and the
+   Steam display name is read straight from the result row, so **no separate
+   Steam-name resolution (and no `STEAM_API_KEY`) is needed**. Lives in
+   `src/providers/<name>/`.
+4. **UI** — the Express server returns the aggregated rows; the frontend renders
+   the resources table with `SteamName (alias)` and sortable columns. Lives in
+   `src/server.ts` + `public/`.
+
+`src/steam/resolver.ts` (SteamID64 → name via the Steam Web API) is kept for a
+future provider that can only search by name; it is **not** used by the Moose flow.
 
 ## Layout
 
@@ -57,18 +61,20 @@ data/                    # sample alias JSON input
 
 Adding **RustyClash / Rustopia / etc.** means one new folder under `src/providers/`
 that implements `StatProvider` (see `src/providers/types.ts`) and registering it in
-`src/providers/index.ts`. **No changes to the CLI, server, or Steam-resolver code.**
+`src/providers/index.ts`. **No changes to the server code.**
 
 A provider is responsible for: opening its site, listing available servers/weeks/tabs
-(where practical), and given a set of persona names, returning one `StatRow` per
-player for the requested tab.
+(where practical), and given the input players (alias + SteamID64), returning one
+`StatRow` per player for the requested tab — finding each however works best for
+that site (Moose searches by SteamID64 and reads the name from the result row).
 
 ## Conventions
 
 - TypeScript, ESM (`"type": "module"`), run with `tsx` in dev.
-- Keep Steam-resolution and provider-scraping decoupled — providers take **persona
-  names**, never Steam IDs, so the resolver can be swapped independently.
-- Never commit `.env`. `STEAM_API_KEY` is a secret.
+- Providers take the raw input players (alias + SteamID64) and decide how to locate
+  them. Prefer SteamID64 search where the site supports it (Moose does) — it needs
+  no name resolution and is unambiguous.
+- Never commit `.env`.
 
 ## Moose facts (verified against the live site, 2026-09-06)
 
@@ -83,12 +89,12 @@ Moose is a **Radzen** Blazor app (`rz-*` classes). The provider drives these:
 - **Tabs** are `button[role="tab"]` with text like `Resources`, `PvP`, `Farming`…
 - **Table** is `table.rz-grid-table`; the **Resources** columns are:
   `Player, Wood, Stone, Metal Ore, Sulfur Ore, HQM Ore, Diesel Collected`.
-- **Finding a player**: type into the grid's `input[placeholder="Search..."]`.
-  Gotchas the provider handles: clear the box before each query (otherwise the grid
-  lags one query behind); Moose **ignores queries shorter than 3 chars**; no match
-  renders a single-cell placeholder row `No items to display.`. The provider requires
-  an exact (case-insensitive) Player match and returns `found: false` rather than a
-  wrong row.
+- **Finding a player**: type the **SteamID64** into the grid's
+  `input[placeholder="Search..."]`. Moose matches SteamID64 directly and returns
+  exactly one row; the Steam display name is that row's Player cell. Gotchas the
+  provider handles: clear the box before each query (otherwise the grid lags one
+  query behind); no match renders a single-cell placeholder row `No items to
+  display.` → reported as `found: false`.
 - **Browser**: launches the system Chrome via `channel: "chrome"` (the bundled
   Chromium download was unavailable here), falling back to bundled Chromium.
 
@@ -99,16 +105,21 @@ without needing a Steam key (`npx tsx scripts/test-moose.mts`).
 
 ```
 npm install
-npx playwright install chromium   # one-time, downloads the browser
-cp .env.example .env              # then fill in STEAM_API_KEY
-npm run dev                       # start server on http://localhost:3000
+# Uses the system Chrome via channel:"chrome". If you'd rather use Playwright's
+# bundled browser, run: npx playwright install chromium
+npm run dev                       # start server on http://localhost:3200
 ```
+
+No `.env` is required to run — the defaults work. Copy `.env.example` to `.env`
+only to override `PORT`/`HEADLESS` (or set a Steam key for a future name-search
+provider).
 
 ## Status / TODO
 
 - [x] Moose provider verified end-to-end against the live site (server → time →
-      Resources tab → per-player search → row extraction).
-- [ ] Wire the real Steam resolver end-to-end (needs `STEAM_API_KEY`).
-- [ ] Populate server/week UI inputs from the live dropdowns instead of free text.
-- [ ] Additional tabs beyond Resources (PvP, Farming, …) — same grid, just another tab.
+      Resources tab → per-player search by SteamID64 → row extraction).
+- [x] Server / week / tab are read live from the site (`listFilters` + `listWeeks`,
+      exposed at `/api/filters` and `/api/weeks`) and drive cascading UI dropdowns.
+- [x] Runs with no Steam API key — Moose is searched by SteamID64 directly.
+- [ ] Cache the live filter reads (each currently opens its own browser, ~15s).
 - [ ] Additional providers (RustyClash / Rustopia / …).

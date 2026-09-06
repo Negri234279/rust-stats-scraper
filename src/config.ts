@@ -2,7 +2,7 @@ import "dotenv/config";
 
 export const config = {
   steamApiKey: process.env.STEAM_API_KEY ?? "",
-  port: Number(process.env.PORT ?? 3000),
+  port: Number(process.env.PORT ?? 3200),
   headless: (process.env.HEADLESS ?? "true").toLowerCase() !== "false",
 };
 

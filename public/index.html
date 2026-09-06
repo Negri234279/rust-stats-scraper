@@ -3,53 +3,100 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Rust Stats Scraper</title>
+    <title>Rust Stats · Neon</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header>
-      <h1>Rust Stats Scraper</h1>
-      <p class="sub">Resuelve SteamID64 → nombre de Steam y extrae la tabla del proveedor.</p>
+    <div id="loadbar" aria-hidden="true"></div>
+    <div class="bg-grid" aria-hidden="true"></div>
+    <div class="bg-glow" aria-hidden="true"></div>
+
+    <header class="hero">
+      <div class="logo">
+        <span class="logo-mark">◢◤</span>
+        <div>
+          <h1 class="neon-title">RUST<span>STATS</span></h1>
+          <p class="sub">Scraper multi-proveedor · <span class="live-dot"></span>moose.gg</p>
+        </div>
+      </div>
     </header>
 
     <main>
       <section class="panel">
-        <h2>1 · Lista de jugadores</h2>
+        <div class="panel-head">
+          <span class="step">01</span>
+          <h2>Lista de jugadores</h2>
+        </div>
         <p class="hint">
-          Pega el JSON <code>[{ "alias": "--Vaga", "steamId": "765..." }]</code> o sube un archivo.
-          Solo se usan los alias que empiezan por <code>--</code>.
+          Pega el JSON <code>[{ "alias": "--Vaga", "steamId": "765…" }]</code> o sube un archivo.
+          Solo se usan los alias que empiezan por <code>--</code>. Se busca por <b>SteamID64</b>.
         </p>
-        <input type="file" id="file" accept="application/json,.json" />
-        <textarea id="players" rows="8" placeholder='[ { "alias": "--Vaga", "steamId": "76561198379460868" } ]'></textarea>
+        <label class="filedrop" for="file">
+          <span class="filedrop-icon">⬆</span>
+          <span id="fileLabel">Arrastra o elige un archivo .json</span>
+          <input type="file" id="file" accept="application/json,.json" hidden />
+        </label>
+        <textarea id="players" rows="8" spellcheck="false"
+          placeholder='[ { "alias": "--Vaga", "steamId": "76561198379460868" } ]'></textarea>
       </section>
 
       <section class="panel">
-        <h2>2 · Filtros de Moose</h2>
+        <div class="panel-head">
+          <span class="step">02</span>
+          <h2>Filtros</h2>
+        </div>
         <div class="grid">
           <label>Proveedor
-            <select id="provider"></select>
+            <div class="select-wrap"><select id="provider"></select></div>
           </label>
           <label>Servidor
-            <input id="server" type="text" placeholder="nombre del servidor" />
+            <div class="select-wrap">
+              <select id="server" disabled><option value="">Cargando…</option></select>
+            </div>
           </label>
           <label>Semana
-            <input id="week" type="text" placeholder="p. ej. Week 12" />
+            <div class="select-wrap">
+              <select id="week" disabled><option value="">Elige un servidor</option></select>
+            </div>
           </label>
           <label>Tab
-            <input id="tab" type="text" value="resources" />
+            <div class="select-wrap"><select id="tab" disabled></select></div>
           </label>
         </div>
-        <button id="run">Extraer estadísticas</button>
-        <span id="status" class="status"></span>
+        <div class="actions">
+          <button id="run" class="btn-neon">
+            <span class="btn-label">Extraer estadísticas</span>
+          </button>
+          <span id="status" class="status"></span>
+        </div>
+        <div id="progress" class="progress" hidden>
+          <div class="progress-track"><span id="progressFill"></span></div>
+          <div class="progress-meta">
+            <span id="progressCount" class="progress-count">0/0</span>
+            <span id="progressPlayer" class="progress-player"></span>
+          </div>
+        </div>
       </section>
 
       <section class="panel" id="resultsPanel" hidden>
-        <h2>Resultados</h2>
+        <div class="panel-head">
+          <span class="step">03</span>
+          <h2>Resultados</h2>
+          <span id="resultsMeta" class="pill"></span>
+        </div>
         <div class="table-wrap">
           <table id="results"></table>
         </div>
       </section>
     </main>
+
+    <footer class="foot">Playwright · Radzen scrape · <span>neon build</span></footer>
 
     <script src="app.js"></script>
   </body>

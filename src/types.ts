@@ -28,6 +28,7 @@ export interface ScrapeQuery {
  */
 export interface StatRow {
   personaName: string;
+  alias: string; // original input alias (e.g. "--Vaga")
   steamId?: string;
   found: boolean; // false if the player was not present in the provider table
   stats: Record<string, string>;

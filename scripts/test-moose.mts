@@ -1,12 +1,12 @@
-// Manual integration check for the Moose provider (bypasses Steam resolution).
+// Manual integration check for the Moose provider (searches by SteamID64).
 // Run: npx tsx scripts/test-moose.mts
 import { mooseProvider } from "../src/providers/moose/index.js";
-import type { ResolvedPlayer } from "../src/types.js";
+import type { PlayerInput } from "../src/types.js";
 
-const players: ResolvedPlayer[] = [
-  { alias: "--Alfred", steamId: "0", personaName: "Alfred" },
-  { alias: "--Lo", steamId: "0", personaName: "Lo" },
-  { alias: "--Nobody", steamId: "0", personaName: "zzz-not-a-real-player-zzz" },
+const players: PlayerInput[] = [
+  { alias: "--Vaga", steamId: "76561198379460868" },
+  { alias: "--Paulita", steamId: "76561198345800593" },
+  { alias: "--Nobody", steamId: "10000000000000000" }, // not on this server/week
 ];
 
 const rows = await mooseProvider.scrape(players, {
