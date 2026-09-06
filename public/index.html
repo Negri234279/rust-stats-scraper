@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rust Stats Scraper</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Rust Stats Scraper</h1>
+      <p class="sub">Resuelve SteamID64 → nombre de Steam y extrae la tabla del proveedor.</p>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>1 · Lista de jugadores</h2>
+        <p class="hint">
+          Pega el JSON <code>[{ "alias": "--Vaga", "steamId": "765..." }]</code> o sube un archivo.
+          Solo se usan los alias que empiezan por <code>--</code>.
+        </p>
+        <input type="file" id="file" accept="application/json,.json" />
+        <textarea id="players" rows="8" placeholder='[ { "alias": "--Vaga", "steamId": "76561198379460868" } ]'></textarea>
+      </section>
+
+      <section class="panel">
+        <h2>2 · Filtros de Moose</h2>
+        <div class="grid">
+          <label>Proveedor
+            <select id="provider"></select>
+          </label>
+          <label>Servidor
+            <input id="server" type="text" placeholder="nombre del servidor" />
+          </label>
+          <label>Semana
+            <input id="week" type="text" placeholder="p. ej. Week 12" />
+          </label>
+          <label>Tab
+            <input id="tab" type="text" value="resources" />
+          </label>
+        </div>
+        <button id="run">Extraer estadísticas</button>
+        <span id="status" class="status"></span>
+      </section>
+
+      <section class="panel" id="resultsPanel" hidden>
+        <h2>Resultados</h2>
+        <div class="table-wrap">
+          <table id="results"></table>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
