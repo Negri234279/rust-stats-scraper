@@ -3,6 +3,10 @@ name: Docker publish
 on:
     push:
         branches: [main, master]
+    # Manual escape hatch: a dispatch always publishes (the gate treats an empty
+    # `github.event.before` as a release), so a failed release can be retried
+    # without a dummy version bump.
+    workflow_dispatch: {}
 
 # A new push supersedes any in-flight build for the same ref.
 concurrency:
@@ -14,6 +18,7 @@ permissions:
 
 env:
     IMAGE: negrii/rust-stats-scraper
+    DOCKERHUB_USERNAME: negrii
 
 jobs:
     # Gate: only build & publish when package.json "version" actually changed
@@ -114,7 +119,7 @@ jobs:
             - name: Login to Docker Hub
               uses: docker/login-action@v3
               with:
-                  username: negrii
+                  username: ${{ env.DOCKERHUB_USERNAME }}
                   password: ${{ secrets.DOCKERHUB_TOKEN }}
 
             - name: Build and push by digest
@@ -169,10 +174,12 @@ jobs:
             - name: Login to Docker Hub
               uses: docker/login-action@v3
               with:
-                  username: negrii
+                  username: ${{ env.DOCKERHUB_USERNAME }}
                   password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-            - name: Compute tags + labels
+            # Only tags are needed here — the OCI labels are baked into the image
+            # by the Dockerfile from the build-args passed in the build job.
+            - name: Compute tags
               id: meta
               uses: docker/metadata-action@v5
               with:
@@ -180,12 +187,6 @@ jobs:
                   tags: |
                       type=raw,value=latest
                       type=raw,value=${{ env.VERSION }}
-                  labels: |
-                      org.opencontainers.image.title=rust-stats-scraper
-                      org.opencontainers.image.description=${{ needs.gate.outputs.description }}
-                      org.opencontainers.image.version=${{ env.VERSION }}
-                      org.opencontainers.image.revision=${{ github.sha }}
-                      org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
 
             - name: Create manifest list and push
               working-directory: /tmp/digests
