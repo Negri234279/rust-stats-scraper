@@ -14,6 +14,8 @@
 
   --glow-cyan: 0 0 10px rgba(34, 211, 238, 0.6), 0 0 22px rgba(34, 211, 238, 0.3);
   --glow-pink: 0 0 10px rgba(255, 45, 149, 0.55), 0 0 22px rgba(255, 45, 149, 0.28);
+
+  --container: 1440px; /* shared page width for header + main */
 }
 
 * { box-sizing: border-box; }
@@ -66,8 +68,12 @@ body {
 body.busy #loadbar { opacity: 1; width: 100%; animation: load 1.4s ease-in-out infinite; }
 @keyframes load { 0% { width: 0; } 60% { width: 85%; } 100% { width: 98%; } }
 
-/* Header */
-.hero { padding: 2.2rem clamp(1rem, 4vw, 3rem) 1rem; }
+/* Header — same max-width/centering as <main> so the logo aligns with panels. */
+.hero {
+  max-width: var(--container);
+  margin: 0 auto;
+  padding: 2.2rem clamp(1rem, 4vw, 3rem) 1rem;
+}
 .logo { display: flex; align-items: center; gap: 1rem; }
 .logo-mark {
   font-size: 2rem;
@@ -95,16 +101,20 @@ body.busy #loadbar { opacity: 1; width: 100%; animation: load 1.4s ease-in-out i
 
 /* Layout */
 main {
-  max-width: 1080px;
+  max-width: var(--container);
   margin: 0 auto;
   padding: 1rem clamp(1rem, 4vw, 3rem) 3rem;
   display: grid;
+  /* minmax(0,1fr) lets grid items shrink below their content so wide tables
+     scroll inside their own container instead of stretching the page. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.4rem;
 }
 
 /* Glass panels with neon edge */
 .panel {
   position: relative;
+  min-width: 0; /* allow the panel to shrink so inner tables can scroll */
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 16px;
@@ -154,7 +164,7 @@ b { color: var(--text); }
 .filedrop-icon { color: var(--cyan); font-size: 1.1rem; }
 
 /* Fields */
-textarea, select {
+textarea, select, input[type="text"], input[type="date"], input[type="number"] {
   width: 100%;
   background: rgba(5, 8, 18, 0.7);
   color: var(--text);
@@ -167,10 +177,23 @@ textarea, select {
   outline: none;
 }
 textarea { resize: vertical; line-height: 1.5; }
-textarea:focus, select:focus {
+textarea:focus, select:focus,
+input[type="text"]:focus, input[type="date"]:focus, input[type="number"]:focus {
   border-color: var(--cyan);
   box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12), var(--glow-cyan);
 }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8) sepia(1) hue-rotate(140deg); cursor: pointer; }
+
+/* Top navigation */
+.nav { display: flex; gap: 0.4rem; margin-top: 0.9rem; }
+.nav a {
+  font-family: "Orbitron", sans-serif; font-size: 0.72rem; letter-spacing: 1px;
+  text-transform: uppercase; text-decoration: none; color: var(--muted);
+  padding: 0.4rem 0.9rem; border: 1px solid rgba(124, 137, 173, 0.25);
+  border-radius: 8px; transition: 0.2s;
+}
+.nav a:hover { color: var(--text); border-color: var(--cyan-soft); }
+.nav a.active { color: var(--cyan); border-color: var(--cyan-soft); box-shadow: var(--glow-cyan); }
 select:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .grid {
@@ -242,6 +265,20 @@ label {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* Global snapshot progress banner (shown for any running snapshot). */
+.g-progress {
+  margin-bottom: 1rem; padding: 0.8rem 0.9rem;
+  border: 1px solid var(--cyan-soft); border-radius: 10px;
+  background: rgba(34, 211, 238, 0.05);
+}
+.g-progress-head {
+  display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap;
+  margin-bottom: 0.55rem; font-size: 0.85rem;
+}
+.g-progress-head b { color: var(--text); font-family: "Orbitron", sans-serif; font-size: 0.8rem; }
+.g-progress-head .progress-count { margin-left: auto; }
+.g-live { color: var(--cyan); text-shadow: var(--glow-cyan); animation: pulse 1.4s ease-in-out infinite; }
+
 /* Table */
 .table-wrap {
   overflow-x: auto;
@@ -280,13 +317,141 @@ tbody tr:hover td:first-child { color: var(--cyan); text-shadow: var(--glow-cyan
 tr.not-found td { color: var(--muted); }
 tr.not-found em { color: var(--pink); font-style: normal; font-family: "Rajdhani"; font-size: 0.8rem; }
 
+/* --- Trackers --- */
+.tracker-list { display: grid; gap: 0.8rem; }
+.tracker-card {
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  background: rgba(5, 8, 18, 0.5);
+  border: 1px solid rgba(124, 137, 173, 0.18); border-radius: 12px;
+  padding: 0.9rem 1.1rem; transition: 0.2s;
+}
+.tracker-card:hover { border-color: var(--cyan-soft); box-shadow: 0 0 24px -12px var(--cyan); }
+.tracker-card .tc-main { flex: 1; min-width: 220px; }
+.tracker-card .tc-name { font-family: "Orbitron", sans-serif; font-weight: 700; font-size: 0.95rem; color: var(--text); }
+.tracker-card .tc-sub { color: var(--muted); font-size: 0.82rem; font-family: "JetBrains Mono", monospace; margin-top: 0.2rem; }
+.tc-stat { text-align: center; font-family: "JetBrains Mono", monospace; }
+.tc-stat b { display: block; color: var(--cyan); font-size: 1.1rem; }
+.tc-stat span { color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; }
+.tc-actions { display: flex; gap: 0.4rem; }
+
+.mini-btn {
+  font-family: "Rajdhani", sans-serif; font-weight: 600; font-size: 0.8rem;
+  color: var(--muted); background: transparent;
+  border: 1px solid rgba(124, 137, 173, 0.3); border-radius: 8px;
+  padding: 0.35rem 0.7rem; cursor: pointer; transition: 0.15s; white-space: nowrap;
+}
+.mini-btn:hover { color: var(--text); border-color: var(--cyan-soft); }
+.mini-btn.danger:hover { color: var(--pink); border-color: var(--pink-soft); }
+.mini-btn.primary { color: var(--cyan); border-color: var(--cyan-soft); }
+.panel-head .mini-btn { margin-left: auto; }
+
+.detail-meta {
+  display: flex; flex-wrap: wrap; gap: 0.5rem 1.4rem; margin-bottom: 1rem;
+  font-family: "JetBrains Mono", monospace; font-size: 0.82rem; color: var(--muted);
+}
+.detail-meta b { color: var(--cyan); font-weight: 600; }
+
+.end-editor {
+  display: flex; gap: 0.6rem; align-items: flex-end; flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.end-editor label { flex: 0 1 200px; }
+
+.stat-picker {
+  display: flex; gap: 0.9rem; align-items: flex-end; flex-wrap: wrap;
+  margin: 1.2rem 0 1rem;
+}
+.stat-picker label { flex: 1 1 160px; min-width: 140px; }
+.stat-picker .view-toggle { flex: 0 0 auto; }
+
+/* Detail table: fit the whole tab without horizontal scroll on normal screens.
+   Columns share the width (fixed layout), long headers/names wrap, numbers stay
+   on one line. On small screens it falls back to scroll (see media query). */
+#d-table { width: 100%; table-layout: fixed; }
+#d-table th, #d-table td {
+  padding: 0.45rem 0.5rem; font-size: 0.78rem;
+  overflow: hidden; text-overflow: ellipsis;
+}
+#d-table thead th {
+  white-space: normal; line-height: 1.1; vertical-align: bottom;
+  font-size: 0.66rem; letter-spacing: 0; cursor: pointer;
+}
+#d-table td { text-align: right; white-space: nowrap; }
+#d-table th:not(:first-child) { text-align: right; }
+/* Player column: fixed, wraps long names. */
+#d-table th:first-child, #d-table td:first-child {
+  width: 22%; min-width: 130px; text-align: left; white-space: normal;
+}
+#d-table td:first-child { font-size: 0.82rem; }
+
+@media (max-width: 860px) {
+  /* Too many columns to fit — let it scroll, keep the player column pinned. */
+  #d-table { table-layout: auto; width: auto; min-width: max-content; }
+  #d-table td { white-space: nowrap; }
+  #d-table th:first-child, #d-table td:first-child {
+    position: sticky; left: 0; z-index: 1; width: auto; min-width: 120px;
+    background: #0a0e1c; white-space: nowrap;
+  }
+  #d-table thead th:first-child { z-index: 3; background: #05070f; }
+  #d-table thead th { z-index: 2; white-space: nowrap; }
+  #d-table tr.total-row td:first-child { background: #180a13; }
+}
+.view-toggle { display: inline-flex; border: 1px solid rgba(124, 137, 173, 0.25); border-radius: 8px; overflow: hidden; }
+.view-toggle button {
+  font-family: "Orbitron", sans-serif; font-size: 0.68rem; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--muted); background: transparent;
+  border: none; padding: 0.55rem 0.9rem; cursor: pointer; transition: 0.15s;
+}
+.view-toggle button.active { color: #04121a; background: var(--cyan); box-shadow: var(--glow-cyan); }
+
+/* delta cells */
+td.delta-pos { color: #6ff5c9; }
+td.delta-zero { color: var(--muted); }
+td.delta-neg { color: var(--pink); }
+td.cum-val { color: var(--text); }
+tr.total-row td { background: rgba(255, 45, 149, 0.06); font-weight: 700; }
+tr.total-row td:first-child { color: var(--pink); }
+
 .foot {
   text-align: center; color: var(--muted); font-size: 0.75rem;
   letter-spacing: 1px; padding: 1.5rem; opacity: 0.6;
 }
 .foot span { color: var(--pink); }
 
-@media (max-width: 560px) {
+/* Toasts (snapshot completion notices) */
+.toasts {
+  position: fixed; bottom: 1.2rem; right: 1.2rem; z-index: 100;
+  display: flex; flex-direction: column; gap: 0.6rem; max-width: min(360px, 90vw);
+}
+.toast {
+  font-family: "Rajdhani", sans-serif; font-weight: 600; font-size: 0.92rem;
+  color: var(--text); background: rgba(10, 14, 28, 0.92);
+  border: 1px solid var(--cyan-soft); border-left-width: 3px; border-radius: 10px;
+  padding: 0.7rem 0.95rem; backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.8), var(--glow-cyan);
+  opacity: 0; transform: translateX(20px); transition: opacity 0.28s, transform 0.28s;
+}
+.toast.show { opacity: 1; transform: translateX(0); }
+.toast.ok { border-color: var(--cyan); }
+.toast.error { border-color: var(--pink); box-shadow: 0 10px 30px -12px rgba(0,0,0,.8), var(--glow-pink); }
+.toast .t-mark { color: var(--cyan); margin-right: 0.4rem; }
+.toast.error .t-mark { color: var(--pink); }
+
+@media (max-width: 640px) {
+  .toasts { left: 1rem; right: 1rem; bottom: 1rem; max-width: none; }
+}
+
+@media (max-width: 640px) {
+  main { padding: 1rem; gap: 1rem; }
+  .panel { padding: 1rem; border-radius: 12px; }
   .actions { flex-direction: column; align-items: stretch; }
   .btn-neon { width: 100%; }
+  .tracker-card { flex-direction: column; align-items: stretch; }
+  .tracker-card .tc-stat { text-align: left; display: flex; gap: 0.5rem; align-items: baseline; }
+  .tc-actions { justify-content: flex-start; flex-wrap: wrap; }
+  .stat-picker .view-toggle { width: 100%; }
+  .stat-picker .view-toggle button { flex: 1; }
+  .end-editor { align-items: stretch; }
+  .end-editor label { flex: 1 1 100%; }
+  table { font-size: 0.8rem; }
 }

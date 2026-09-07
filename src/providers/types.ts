@@ -1,4 +1,11 @@
-import type { PlayerInput, ScrapeQuery, StatRow } from "../types.js";
+import type {
+  PlayerInput,
+  ScrapeQuery,
+  SnapshotPlayer,
+  SnapshotProgress,
+  SnapshotQuery,
+  StatRow,
+} from "../types.js";
 
 /** Filter options read live from a provider (server-independent). */
 export interface ProviderFilters {
@@ -44,4 +51,16 @@ export interface StatProvider {
     query: ScrapeQuery,
     onRow?: RowProgress
   ): Promise<StatRow[]>;
+
+  /**
+   * Capture every requested tab for every player in one pass (used by the wipe
+   * tracker). Returns one `SnapshotPlayer` per input player with stats keyed by
+   * tab → column. `onProgress` reports `(done, total, tab, name)` across the
+   * whole tab × player grid.
+   */
+  snapshot(
+    players: PlayerInput[],
+    query: SnapshotQuery,
+    onProgress?: SnapshotProgress
+  ): Promise<SnapshotPlayer[]>;
 }

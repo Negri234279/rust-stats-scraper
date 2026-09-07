@@ -4,6 +4,12 @@ const opts = (items, placeholder) =>
   (placeholder ? `<option value="">${placeholder}</option>` : "") +
   items.map((v) => `<option value="${v}">${v}</option>`).join("");
 
+// Show the app version (from package.json) in the footer.
+fetch("/api/version")
+  .then((r) => r.json())
+  .then(({ version }) => { if (version) $("appVersion").textContent = "v" + version; })
+  .catch(() => {});
+
 // Populate provider dropdown, then load its live filters.
 fetch("/api/providers")
   .then((r) => r.json())
@@ -30,13 +36,16 @@ async function loadFilters() {
     const r = await fetch(`/api/filters?provider=${encodeURIComponent(provider)}`);
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || "Error");
-    setDropdown("server", data.servers, "Elige un servidor", false);
+    // No placeholder: the first server is selected by default.
+    setDropdown("server", data.servers, null, false);
     const tabs = data.tabs?.length ? data.tabs : ["Resources"];
     setDropdown("tab", tabs, null, false);
     // Default to Resources if present.
     const res = [...$("tab").options].find((o) => /resources/i.test(o.value));
     if (res) $("tab").value = res.value;
     setStatus("");
+    // Auto-load the weeks for the default (first) server.
+    if (data.servers?.length) await loadWeeks();
   } catch (err) {
     setStatus("No se pudieron leer los filtros: " + err.message, "error");
   } finally {
@@ -58,7 +67,8 @@ async function loadWeeks() {
     );
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || "Error");
-    setDropdown("week", data.weeks, "Elige una semana", false);
+    // No placeholder: the most recent week is selected by default.
+    setDropdown("week", data.weeks, null, false);
     setStatus("");
   } catch (err) {
     setStatus("No se pudieron leer las semanas: " + err.message, "error");

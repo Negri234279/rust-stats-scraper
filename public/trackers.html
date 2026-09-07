@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rust Stats · Trackers</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="loadbar" aria-hidden="true"></div>
+    <div class="bg-grid" aria-hidden="true"></div>
+    <div class="bg-glow" aria-hidden="true"></div>
+
+    <header class="hero">
+      <div class="logo">
+        <span class="logo-mark">◢◤</span>
+        <div>
+          <h1 class="neon-title">RUST<span>STATS</span></h1>
+          <p class="sub">Trackers por wipe · <span class="live-dot"></span>producción diaria</p>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="/">Scraper</a>
+        <a href="/trackers.html" class="active">Trackers</a>
+      </nav>
+    </header>
+
+    <main>
+      <!-- Create -->
+      <section class="panel">
+        <div class="panel-head">
+          <span class="step">＋</span>
+          <h2>Nuevo tracker</h2>
+        </div>
+        <div class="grid">
+          <label>Nombre <input id="t-name" type="text" placeholder="Wipe septiembre" /></label>
+          <label>Proveedor <div class="select-wrap"><select id="t-provider"></select></div></label>
+          <label>Servidor <div class="select-wrap"><select id="t-server" disabled><option value="">Cargando…</option></select></div></label>
+          <label>Semana (wipe) <div class="select-wrap"><select id="t-week" disabled><option value="">Elige un servidor</option></select></div></label>
+          <label>Inicio <input id="t-start" type="date" /></label>
+          <label>Fin (opcional) <input id="t-end" type="date" /></label>
+        </div>
+        <p class="hint">Se toma <b>1 snapshot al día</b> (al cambiar el día, a medianoche). Se capturan las <b id="t-tabcount">todas</b> tabs de Moose por snapshot. Jugadores: pega el JSON (solo alias <code>--</code>).</p>
+        <label class="filedrop" for="t-file">
+          <span class="filedrop-icon">⬆</span>
+          <span id="t-fileLabel">Arrastra o elige un .json de jugadores</span>
+          <input type="file" id="t-file" accept="application/json,.json" hidden />
+        </label>
+        <textarea id="t-players" rows="5" spellcheck="false"
+          placeholder='[ { "alias": "--User", "steamId": "76561198379460868" } ]'></textarea>
+        <div class="actions">
+          <button id="t-create" class="btn-neon"><span class="btn-label">Crear tracker</span></button>
+          <span id="t-status" class="status"></span>
+        </div>
+      </section>
+
+      <!-- List -->
+      <section class="panel">
+        <div class="panel-head">
+          <span class="step">≡</span>
+          <h2>Trackers</h2>
+          <span id="t-listMeta" class="pill"></span>
+        </div>
+        <div id="g-progress" class="progress g-progress" hidden>
+          <div class="g-progress-head">
+            <span class="g-live">● </span><b id="g-progressName"></b>
+            <span id="g-progressPlayer" class="progress-player"></span>
+            <span id="g-progressCount" class="progress-count"></span>
+          </div>
+          <div class="progress-track"><span id="g-progressFill"></span></div>
+        </div>
+        <div id="t-list" class="tracker-list"></div>
+      </section>
+
+      <!-- Detail -->
+      <section class="panel" id="t-detail" hidden>
+        <div class="panel-head">
+          <span class="step">◎</span>
+          <h2 id="d-title">Detalle</h2>
+          <button id="d-close" class="mini-btn">✕ cerrar</button>
+        </div>
+        <div id="d-meta" class="detail-meta"></div>
+
+        <div class="end-editor">
+          <label>Fin del wipe <input id="d-end" type="date" /></label>
+          <button id="d-saveEnd" class="mini-btn primary">Guardar fin</button>
+          <button id="d-endToday" class="mini-btn">Terminar hoy</button>
+          <button id="d-clearEnd" class="mini-btn">Sin fin</button>
+        </div>
+
+        <div class="actions">
+          <button id="d-snapshot" class="btn-neon"><span class="btn-label">Tomar snapshot ahora</span></button>
+          <span id="d-status" class="status"></span>
+        </div>
+
+        <div class="stat-picker">
+          <label>Tab <div class="select-wrap"><select id="d-tab"></select></div></label>
+          <label>Día <div class="select-wrap"><select id="d-day"></select></div></label>
+          <div class="view-toggle" id="d-toggle">
+            <button data-mode="delta" class="active">Δ diario</button>
+            <button data-mode="cum">Acumulado</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="d-table"></table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">Snapshots programados · deltas diarios · <span id="appVersion">neon build</span></footer>
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+    <script src="trackers.js"></script>
+  </body>
+</html>

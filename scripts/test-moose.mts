@@ -4,8 +4,8 @@ import { mooseProvider } from "../src/providers/moose/index.js";
 import type { PlayerInput } from "../src/types.js";
 
 const players: PlayerInput[] = [
-  { alias: "--Vaga", steamId: "76561198379460868" },
-  { alias: "--Paulita", steamId: "76561198345800593" },
+  { alias: "--User1", steamId: "76561198379460868" },
+  { alias: "--User2", steamId: "76561198345800593" },
   { alias: "--Nobody", steamId: "10000000000000000" }, // not on this server/week
 ];
 

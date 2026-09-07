@@ -1,6 +1,13 @@
 import { chromium, type Browser, type Locator, type Page } from "playwright";
 import { config } from "../../config.js";
-import type { PlayerInput, ScrapeQuery, StatRow } from "../../types.js";
+import type {
+  PlayerInput,
+  ScrapeQuery,
+  SnapshotPlayer,
+  SnapshotProgress,
+  SnapshotQuery,
+  StatRow,
+} from "../../types.js";
 import type { ProviderFilters, RowProgress, StatProvider } from "../types.js";
 
 const MOOSE_STATS_URL = "https://moose.gg/stats";
@@ -85,13 +92,78 @@ class MooseProvider implements StatProvider {
     }
   }
 
-  /** Prefer the system Chrome (bundled Chromium download may be unavailable). */
-  private async launch(): Promise<Browser> {
+  /**
+   * Capture every requested tab for every player in a single browser session.
+   * Selects server + week once, then loops tab → players, searching each player
+   * by SteamID64 and storing that tab's columns under `stats[tab]`.
+   */
+  async snapshot(
+    players: PlayerInput[],
+    query: SnapshotQuery,
+    onProgress?: SnapshotProgress
+  ): Promise<SnapshotPlayer[]> {
+    const browser = await this.launch();
     try {
-      return await chromium.launch({ channel: "chrome", headless: config.headless });
-    } catch {
-      return await chromium.launch({ headless: config.headless });
+      const page = await this.openStats(browser);
+      await this.selectServer(page, query.server);
+      await this.selectWeek(page, query.week);
+
+      const result = new Map<string, SnapshotPlayer>(
+        players.map((p) => [
+          p.steamId,
+          { alias: p.alias, steamId: p.steamId, personaName: "", found: false, stats: {} },
+        ])
+      );
+
+      const total = query.tabs.length * players.length;
+      let done = 0;
+
+      for (const tab of query.tabs) {
+        await this.selectTab(page, tab);
+        await page.waitForSelector(`${SEL.grid} thead th`, { timeout: 15_000 });
+        const headers = await page.locator(`${SEL.grid} thead th`).allInnerTexts();
+
+        for (const player of players) {
+          const row = await this.extractPlayerRow(page, headers, player);
+          const sp = result.get(player.steamId)!;
+          if (row.found) {
+            sp.found = true;
+            if (!sp.personaName) sp.personaName = row.personaName;
+            const tabStats: Record<string, string> = {};
+            for (const [k, v] of Object.entries(row.stats)) {
+              if (!/^player$/i.test(k)) tabStats[k] = v;
+            }
+            sp.stats[tab] = tabStats;
+          }
+          done++;
+          onProgress?.(done, total, tab, row.personaName || player.alias);
+        }
+      }
+
+      return [...result.values()];
+    } finally {
+      await browser.close();
     }
+  }
+
+  /**
+   * Launch the browser. With `BROWSER_CHANNEL=chrome` (default) it tries the
+   * system Google Chrome and falls back to bundled Chromium; with "chromium" (or
+   * empty) it uses bundled Chromium directly — the only option on Linux ARM64
+   * (Raspberry Pi), where there is no Chrome channel.
+   */
+  private async launch(): Promise<Browser> {
+    // Flags needed to run Chromium inside containers (no user namespace / small /dev/shm).
+    const args = ["--no-sandbox", "--disable-dev-shm-usage"];
+    const channel = config.browserChannel;
+    if (channel && channel !== "chromium") {
+      try {
+        return await chromium.launch({ channel, headless: config.headless, args });
+      } catch {
+        // Fall through to bundled Chromium.
+      }
+    }
+    return await chromium.launch({ headless: config.headless, args });
   }
 
   /** Open the stats page and wait for Blazor to connect and render. */

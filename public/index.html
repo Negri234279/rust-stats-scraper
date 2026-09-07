@@ -25,6 +25,10 @@
           <p class="sub">Scraper multi-proveedor · <span class="live-dot"></span>moose.gg</p>
         </div>
       </div>
+      <nav class="nav">
+        <a href="/" class="active">Scraper</a>
+        <a href="/trackers.html">Trackers</a>
+      </nav>
     </header>
 
     <main>
@@ -34,7 +38,7 @@
           <h2>Lista de jugadores</h2>
         </div>
         <p class="hint">
-          Pega el JSON <code>[{ "alias": "--Vaga", "steamId": "765…" }]</code> o sube un archivo.
+          Pega el JSON <code>[{ "alias": "--User", "steamId": "765…" }]</code> o sube un archivo.
           Solo se usan los alias que empiezan por <code>--</code>. Se busca por <b>SteamID64</b>.
         </p>
         <label class="filedrop" for="file">
@@ -43,7 +47,7 @@
           <input type="file" id="file" accept="application/json,.json" hidden />
         </label>
         <textarea id="players" rows="8" spellcheck="false"
-          placeholder='[ { "alias": "--Vaga", "steamId": "76561198379460868" } ]'></textarea>
+          placeholder='[ { "alias": "--User", "steamId": "7656119811460868" } ]'></textarea>
       </section>
 
       <section class="panel">
@@ -96,7 +100,7 @@
       </section>
     </main>
 
-    <footer class="foot">Playwright · Radzen scrape · <span>neon build</span></footer>
+    <footer class="foot">Playwright · Radzen scrape · <span id="appVersion">neon build</span></footer>
 
     <script src="app.js"></script>
   </body>

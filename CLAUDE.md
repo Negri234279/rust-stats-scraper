@@ -23,7 +23,7 @@ rendered table.
 
 1. **Input** — a JSON list of `{ alias, steamId }` objects (see `data/` for a sample).
 2. **Alias filter** — keep only entries whose `alias` starts with `--`
-   (e.g. `--Vaga`). Entries with other prefixes (e.g. `**Pelos`) are dropped.
+   (e.g. `--User`). Entries with other prefixes (e.g. `**Pelos`) are dropped.
    Lives in `src/steam/aliasFilter.ts`.
 3. **Provider scrape** — Playwright opens the provider (Moose), selects
    `server / week / tab`, and for each player searches the grid **by SteamID64**
@@ -51,10 +51,16 @@ src/
     types.ts             # StatProvider interface — the contract every provider implements
     index.ts             # provider registry (name -> provider)
     moose/
-      index.ts           # Moose provider (Playwright)
+      index.ts           # Moose provider (Playwright): scrape() + snapshot()
+  trackers/
+    types.ts             # Tracker, Snapshot, SnapshotPlayer
+    store.ts             # JSON persistence (data/trackers/<id>.json)
+    analytics.ts         # listStats() + computeSeries() (daily deltas)
+    snapshotRunner.ts    # takeSnapshot() with a global one-at-a-time lock
+    scheduler.ts         # background cron: snapshot due trackers
   server.ts              # Express: static UI + /api endpoints
-public/                  # vanilla HTML/CSS/JS frontend
-data/                    # sample alias JSON input
+public/                  # vanilla HTML/CSS/JS frontend (index + trackers pages)
+data/                    # sample alias JSON input; trackers/ (runtime, gitignored)
 ```
 
 ## The provider contract
@@ -67,6 +73,56 @@ A provider is responsible for: opening its site, listing available servers/weeks
 (where practical), and given the input players (alias + SteamID64), returning one
 `StatRow` per player for the requested tab — finding each however works best for
 that site (Moose searches by SteamID64 and reads the name from the result row).
+
+## Wipe trackers (time-series)
+
+A tracker follows one **company** across a **wipe** (server + week window) and
+records **all Moose tabs** in periodic snapshots, so you can see totals and
+**daily production** (day-over-day deltas).
+
+- **Model** (`src/trackers/types.ts`): a `Tracker` has name, company, server,
+  week, `tabs[]`, start/end dates, `intervalHours`, players, and a list of
+  `Snapshot`s. Each snapshot is `SnapshotPlayer[]` with `stats[tab][column]`.
+- **Storage** (`src/trackers/store.ts`): one JSON file per tracker under
+  `data/trackers/<id>.json` (gitignored — runtime data).
+- **Capture** (`providers/moose` `snapshot()`): one browser session selects
+  server+week, then loops tab → players, searching each player by SteamID64.
+  Cost ≈ `tabs × players` searches (~3s each) — a 49-player, 12-tab snapshot is
+  slow (tens of minutes); that's fine because it runs in the background.
+- **Scheduler** (`src/trackers/scheduler.ts`): started in `server.ts` on listen.
+  It checks every 10 min and takes **one snapshot per local calendar day** — a
+  tracker is due when its last snapshot falls on an earlier local day (day
+  boundary = local midnight), so the first tick after midnight captures the new
+  day. Robust to downtime (a missed midnight just snapshots on the next tick). A
+  global lock (`snapshotRunner.ts`) ensures only one snapshot runs at a time.
+  Creating a tracker fires one initial snapshot in the background (that counts as
+  the current day's). `intervalHours` is retained on the model for backward
+  compat but no longer drives scheduling.
+- **Analytics** (`src/trackers/analytics.ts`): `computeSeries(tracker, tab, col)`
+  groups snapshots by local day (last snapshot per day) and returns, for the
+  company total and each player, per-day `{ cum, delta }`. First day's delta is
+  its full value (baseline from 0); an unchanged day yields delta 0.
+  `computeTabSeries(tracker, tab)` returns the same for **every column of a tab**
+  at once — the detail UI shows the whole tab (columns = stats) for a chosen day,
+  not one stat at a time.
+  `endDate` is optional (empty = open-ended wipe); set/clear it later from the
+  detail view (`PATCH /api/trackers/:id`). The scheduler treats an empty
+  `endDate` as no upper bound.
+- **Live progress** (`src/trackers/events.ts`): every snapshot — initial, manual,
+  or scheduled — broadcasts `start`/`progress`/`done`/`error` on an event bus.
+  `GET /api/trackers/events` is an **SSE** stream of these; the trackers page keeps
+  an `EventSource` open and shows a global progress banner for whichever snapshot
+  is running (catches up mid-run via `currentSnapshot()`), and a corner toast on
+  each `done`/`error` (even for background runs with no detail open). The manual
+  snapshot endpoint is fire-and-forget (202); progress comes over SSE, not the
+  response.
+  NB: the SSE route must be registered **before** `/api/trackers/:id` or it's
+  shadowed as `id="events"`.
+- **API**: `GET/POST /api/trackers`, `GET/PATCH/DELETE /api/trackers/:id`,
+  `GET /api/trackers/events` (SSE), `GET /api/trackers/:id/series?tab=&column=`,
+  `GET /api/trackers/:id/tab-series?tab=`, and
+  `POST /api/trackers/:id/snapshot` (fire-and-forget, 202). UI at
+  `public/trackers.html` + `trackers.js`: pick Tab + Día, Δ-diario / Acumulado.
 
 ## Conventions
 
@@ -121,5 +177,11 @@ provider).
 - [x] Server / week / tab are read live from the site (`listFilters` + `listWeeks`,
       exposed at `/api/filters` and `/api/weeks`) and drive cascading UI dropdowns.
 - [x] Runs with no Steam API key — Moose is searched by SteamID64 directly.
-- [ ] Cache the live filter reads (each currently opens its own browser, ~15s).
+- [x] Wipe trackers: scheduled all-tab snapshots + daily production deltas
+      (total + per player), verified end-to-end.
+- [x] Cache the filter/week reads (`src/cache.ts`, TTL `FILTERS_CACHE_TTL_HOURS`,
+      default 24h, with in-flight dedupe). Bust via `POST /api/cache/clear`.
+      Cold ~15s → cached ~20ms.
+- [ ] Speed up snapshots (per-player search is O(tabs×players); consider reading
+      full tab pages once instead of searching each player).
 - [ ] Additional providers (RustyClash / Rustopia / …).

@@ -28,8 +28,36 @@ export interface ScrapeQuery {
  */
 export interface StatRow {
   personaName: string;
-  alias: string; // original input alias (e.g. "--Vaga")
+  alias: string; // original input alias (e.g. "--User")
   steamId?: string;
   found: boolean; // false if the player was not present in the provider table
   stats: Record<string, string>;
 }
+
+/** A full multi-tab snapshot request for the tracker feature. */
+export interface SnapshotQuery {
+  server: string;
+  week: string;
+  tabs: string[]; // provider tab labels to capture, e.g. ["RESOURCES","PVP",...]
+}
+
+/**
+ * One player captured across every requested tab.
+ * `stats` is keyed tab → column → cell text, e.g.
+ * `{ "RESOURCES": { "Wood": "3,524" }, "PVP": { "Kills": "59,323" } }`.
+ */
+export interface SnapshotPlayer {
+  alias: string;
+  steamId: string;
+  personaName: string;
+  found: boolean;
+  stats: Record<string, Record<string, string>>;
+}
+
+/** Progress callback while a multi-tab snapshot runs. */
+export type SnapshotProgress = (
+  done: number,
+  total: number,
+  tab: string,
+  personaName: string
+) => void;

@@ -1,0 +1,15 @@
+node_modules
+dist
+data
+.git
+.gitignore
+*.log
+.env
+.env.*
+scripts
+playwright-report
+test-results
+.claude
+.vscode
+.DS_Store
+README.md

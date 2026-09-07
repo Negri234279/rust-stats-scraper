@@ -4,7 +4,7 @@ import type { PlayerInput } from "../types.js";
 export const ALIAS_PREFIX = "--";
 
 /**
- * Keep only entries whose alias starts with `--` (e.g. "--Vaga"), dropping
+ * Keep only entries whose alias starts with `--` (e.g. "--User"), dropping
  * everything else (e.g. "**Pelos"). Trims surrounding whitespace before testing.
  */
 export function filterAliases(
