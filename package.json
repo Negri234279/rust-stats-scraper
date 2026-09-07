@@ -1,6 +1,6 @@
 {
   "name": "rust-stats-scraper",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Cross-provider scraper for Rust game-server stat sites, with a web UI.",
   "type": "module",
   "scripts": {
