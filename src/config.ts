@@ -10,6 +10,10 @@ export const config = {
   // laptop); "chromium" (or empty) uses Playwright's bundled Chromium — required on
   // Linux ARM64 (Raspberry Pi), where no Chrome channel exists.
   browserChannel: process.env.BROWSER_CHANNEL ?? "chrome",
+  // How many parallel browser contexts scrape/snapshot shard players across. Each
+  // context is an independent Chrome window with its own grid, so N of them run N
+  // searches at once. Higher = faster but more CPU/RAM (keep it low on the Pi).
+  scraperConcurrency: Math.max(1, Number(process.env.SCRAPER_CONCURRENCY ?? 4)),
 };
 
 export function assertSteamKey(): string {

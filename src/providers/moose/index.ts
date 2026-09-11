@@ -1,4 +1,10 @@
-import { chromium, type Browser, type Locator, type Page } from "playwright";
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "playwright";
 import { config } from "../../config.js";
 import type {
   PlayerInput,
@@ -70,22 +76,25 @@ class MooseProvider implements StatProvider {
     onRow?: RowProgress
   ): Promise<StatRow[]> {
     const browser = await this.launch();
+    // Results are written by global index so the returned order matches the input
+    // regardless of which parallel context handled each player.
+    const rows: StatRow[] = new Array(players.length);
+    let done = 0;
     try {
-      const page = await this.openStats(browser);
+      await this.forEachShard(browser, players, async (page, chunk) => {
+        await this.selectServer(page, query.server);
+        await this.selectWeek(page, query.week);
+        await this.selectTab(page, query.tab);
 
-      await this.selectServer(page, query.server);
-      await this.selectWeek(page, query.week);
-      await this.selectTab(page, query.tab);
+        await page.waitForSelector(`${SEL.grid} thead th`, { timeout: 15_000 });
+        const headers = await page.locator(`${SEL.grid} thead th`).allInnerTexts();
 
-      await page.waitForSelector(`${SEL.grid} thead th`, { timeout: 15_000 });
-      const headers = await page.locator(`${SEL.grid} thead th`).allInnerTexts();
-
-      const rows: StatRow[] = [];
-      for (const player of players) {
-        const row = await this.extractPlayerRow(page, headers, player);
-        rows.push(row);
-        onRow?.(row, rows.length, players.length);
-      }
+        for (const { index, player } of chunk) {
+          const row = await this.extractPlayerRow(page, headers, player);
+          rows[index] = row;
+          onRow?.(row, ++done, players.length);
+        }
+      });
       return rows;
     } finally {
       await browser.close();
@@ -93,9 +102,10 @@ class MooseProvider implements StatProvider {
   }
 
   /**
-   * Capture every requested tab for every player in a single browser session.
-   * Selects server + week once, then loops tab → players, searching each player
-   * by SteamID64 and storing that tab's columns under `stats[tab]`.
+   * Capture every requested tab for every player. Players are sharded across
+   * several parallel browser contexts (see `forEachShard`); each context selects
+   * server + week once, then loops tab → its players, searching each by SteamID64
+   * and storing that tab's columns under `stats[tab]`.
    */
   async snapshot(
     players: PlayerInput[],
@@ -103,46 +113,86 @@ class MooseProvider implements StatProvider {
     onProgress?: SnapshotProgress
   ): Promise<SnapshotPlayer[]> {
     const browser = await this.launch();
+    const result = new Map<string, SnapshotPlayer>(
+      players.map((p) => [
+        p.steamId,
+        { alias: p.alias, steamId: p.steamId, personaName: "", found: false, stats: {} },
+      ])
+    );
+
+    const total = query.tabs.length * players.length;
+    let done = 0;
+
     try {
-      const page = await this.openStats(browser);
-      await this.selectServer(page, query.server);
-      await this.selectWeek(page, query.week);
+      // Each shard is an independent context that selects server+week once, then
+      // walks every tab for its slice of players. Shards handle disjoint players,
+      // so they write into the shared result map without conflicting. `done` is a
+      // shared counter; because shards advance through tabs in parallel the tab
+      // label in each progress event is whichever shard reported last — the
+      // done/total count stays exact.
+      await this.forEachShard(browser, players, async (page, chunk) => {
+        await this.selectServer(page, query.server);
+        await this.selectWeek(page, query.week);
 
-      const result = new Map<string, SnapshotPlayer>(
-        players.map((p) => [
-          p.steamId,
-          { alias: p.alias, steamId: p.steamId, personaName: "", found: false, stats: {} },
-        ])
-      );
+        for (const tab of query.tabs) {
+          await this.selectTab(page, tab);
+          await page.waitForSelector(`${SEL.grid} thead th`, { timeout: 15_000 });
+          const headers = await page.locator(`${SEL.grid} thead th`).allInnerTexts();
 
-      const total = query.tabs.length * players.length;
-      let done = 0;
-
-      for (const tab of query.tabs) {
-        await this.selectTab(page, tab);
-        await page.waitForSelector(`${SEL.grid} thead th`, { timeout: 15_000 });
-        const headers = await page.locator(`${SEL.grid} thead th`).allInnerTexts();
-
-        for (const player of players) {
-          const row = await this.extractPlayerRow(page, headers, player);
-          const sp = result.get(player.steamId)!;
-          if (row.found) {
-            sp.found = true;
-            if (!sp.personaName) sp.personaName = row.personaName;
-            const tabStats: Record<string, string> = {};
-            for (const [k, v] of Object.entries(row.stats)) {
-              if (!/^player$/i.test(k)) tabStats[k] = v;
+          for (const { player } of chunk) {
+            const row = await this.extractPlayerRow(page, headers, player);
+            const sp = result.get(player.steamId)!;
+            if (row.found) {
+              sp.found = true;
+              if (!sp.personaName) sp.personaName = row.personaName;
+              const tabStats: Record<string, string> = {};
+              for (const [k, v] of Object.entries(row.stats)) {
+                if (!/^player$/i.test(k)) tabStats[k] = v;
+              }
+              sp.stats[tab] = tabStats;
             }
-            sp.stats[tab] = tabStats;
+            onProgress?.(++done, total, tab, row.personaName || player.alias);
           }
-          done++;
-          onProgress?.(done, total, tab, row.personaName || player.alias);
         }
-      }
+      });
 
       return [...result.values()];
     } finally {
       await browser.close();
+    }
+  }
+
+  /**
+   * Shard `players` across up to `config.scraperConcurrency` independent browser
+   * contexts and run `work` on each in parallel. Every context gets a freshly
+   * opened stats page and its own slice of players (tagged with their original
+   * index so callers can preserve input order). Contexts are always closed, even
+   * if a shard throws.
+   */
+  private async forEachShard(
+    browser: Browser,
+    players: PlayerInput[],
+    work: (
+      page: Page,
+      chunk: { index: number; player: PlayerInput }[]
+    ) => Promise<void>
+  ): Promise<void> {
+    const tagged = players.map((player, index) => ({ index, player }));
+    const workers = Math.min(config.scraperConcurrency, tagged.length) || 1;
+    const chunks = shard(tagged, workers);
+    const contexts: BrowserContext[] = [];
+    try {
+      await Promise.all(
+        chunks.map(async (chunk) => {
+          if (chunk.length === 0) return;
+          const context = await browser.newContext();
+          contexts.push(context);
+          const page = await this.openStats(context);
+          await work(page, chunk);
+        })
+      );
+    } finally {
+      await Promise.all(contexts.map((c) => c.close().catch(() => {})));
     }
   }
 
@@ -167,8 +217,8 @@ class MooseProvider implements StatProvider {
   }
 
   /** Open the stats page and wait for Blazor to connect and render. */
-  private async openStats(browser: Browser): Promise<Page> {
-    const page = await browser.newPage();
+  private async openStats(target: Browser | BrowserContext): Promise<Page> {
+    const page = await target.newPage();
     await page.setViewportSize({ width: 1600, height: 1000 });
     await page.goto(MOOSE_STATS_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await page.waitForTimeout(8_000);
@@ -211,10 +261,70 @@ class MooseProvider implements StatProvider {
 
   private async selectTab(page: Page, tab: string): Promise<void> {
     if (!tab) return;
+    // Switching tabs swaps the grid's columns and rows over the Blazor socket.
+    // Wait for the grid to actually change and settle rather than a blind 2.5s —
+    // a fixed row-count check is too weak here (the previous tab also has rows).
+    const baseline = await this.gridSignature(page);
     await page
       .getByRole("tab", { name: new RegExp(`^${escapeRe(tab)}$`, "i") })
       .click();
-    await page.waitForTimeout(2_500);
+    await this.waitSettled(page, baseline, 300, 6_000);
+  }
+
+  /** Wait for the visible grid to hold more than one row (the full, unfiltered
+   *  list is present) — cheap signal used after clearing the search box. */
+  private async waitManyRows(page: Page, timeout: number): Promise<void> {
+    await page
+      .waitForFunction(
+        (sel) =>
+          Array.from(document.querySelectorAll(`${sel} tbody tr`)).filter(
+            (r) => (r as HTMLElement).offsetParent !== null
+          ).length > 1,
+        SEL.grid,
+        { timeout }
+      )
+      .catch(() => {});
+  }
+
+  /**
+   * A cheap fingerprint of the visible grid: number of rows + the first row's
+   * text. It changes whenever the grid re-renders (tab switch, search filter),
+   * which is what `waitSettled` watches for.
+   */
+  private async gridSignature(page: Page): Promise<string> {
+    return page.evaluate((sel) => {
+      const rows = Array.from(
+        document.querySelectorAll(`${sel} tbody tr`)
+      ).filter((r) => (r as HTMLElement).offsetParent !== null);
+      const first = rows[0]
+        ? (rows[0] as HTMLElement).innerText.replace(/\s+/g, " ").trim()
+        : "";
+      return `${rows.length}|${first}`;
+    }, SEL.grid);
+  }
+
+  /**
+   * Wait until the grid has both **changed** from `baseline` and then **held
+   * steady** for two consecutive polls — i.e. the SPA finished re-rendering the
+   * result. This adapts to load automatically (a busy, parallel run just waits a
+   * little longer) where a fixed sleep would either waste time or read too early.
+   * `min` skips the initial debounce; falls through at `max`.
+   */
+  private async waitSettled(
+    page: Page,
+    baseline: string,
+    min: number,
+    max: number
+  ): Promise<void> {
+    const start = Date.now();
+    await page.waitForTimeout(min);
+    let prev = await this.gridSignature(page);
+    while (Date.now() - start < max) {
+      await page.waitForTimeout(250);
+      const cur = await this.gridSignature(page);
+      if (cur !== baseline && cur === prev) return;
+      prev = cur;
+    }
   }
 
   /**
@@ -233,10 +343,15 @@ class MooseProvider implements StatProvider {
     player: PlayerInput
   ): Promise<StatRow> {
     const search = page.locator(SEL.search).locator("visible=true").first();
+    // Clear, then wait for the grid to repopulate to the full list before typing
+    // the next query — this is what stops the grid lagging a query behind.
     await search.fill("");
-    await page.waitForTimeout(500);
+    await this.waitManyRows(page, 3_000);
+    const full = await this.gridSignature(page);
+    // Type the SteamID64 and wait for the grid to change from the full list and
+    // settle on the single match (or the "No items" placeholder).
     await search.fill(player.steamId);
-    await page.waitForTimeout(2_500);
+    await this.waitSettled(page, full, 300, 5_000);
 
     const rowLocs = page.locator(`${SEL.grid} tbody tr`);
     const count = await rowLocs.count();
@@ -280,6 +395,13 @@ class MooseProvider implements StatProvider {
 
 function unique(items: string[]): string[] {
   return [...new Set(items)];
+}
+
+/** Split `items` into `n` roughly equal buckets, round-robin. */
+function shard<T>(items: T[], n: number): T[][] {
+  const chunks: T[][] = Array.from({ length: n }, () => []);
+  items.forEach((item, i) => chunks[i % n].push(item));
+  return chunks;
 }
 
 function escapeRe(s: string): string {

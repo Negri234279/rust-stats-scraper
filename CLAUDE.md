@@ -85,10 +85,14 @@ records **all Moose tabs** in periodic snapshots, so you can see totals and
   `Snapshot`s. Each snapshot is `SnapshotPlayer[]` with `stats[tab][column]`.
 - **Storage** (`src/trackers/store.ts`): one JSON file per tracker under
   `data/trackers/<id>.json` (gitignored — runtime data).
-- **Capture** (`providers/moose` `snapshot()`): one browser session selects
-  server+week, then loops tab → players, searching each player by SteamID64.
-  Cost ≈ `tabs × players` searches (~3s each) — a 49-player, 12-tab snapshot is
-  slow (tens of minutes); that's fine because it runs in the background.
+- **Capture** (`providers/moose` `snapshot()`): players are **sharded across
+  several parallel browser contexts** (`forEachShard`, default 4 — see
+  `SCRAPER_CONCURRENCY`). Each context selects server+week once, then loops
+  tab → its slice of players, searching each by SteamID64. Only the per-player
+  searches parallelize; the tab walk is replicated in every context, and the
+  ~16s startup (page load + server/week select) is paid once per context in
+  parallel. Net: a 49-player, 12-tab snapshot drops from ~25-30 min to ~6-7 min.
+  Still background work, so slowness is fine. `scrape()` shards the same way.
 - **Scheduler** (`src/trackers/scheduler.ts`): started in `server.ts` on listen.
   It checks every 10 min and takes **one snapshot per local calendar day** — a
   tracker is due when its last snapshot falls on an earlier local day (day
@@ -151,6 +155,13 @@ Moose is a **Radzen** Blazor app (`rz-*` classes). The provider drives these:
   provider handles: clear the box before each query (otherwise the grid lags one
   query behind); no match renders a single-cell placeholder row `No items to
   display.` → reported as `found: false`.
+- **Waiting on the SPA**: the grid re-renders over the Blazor WebSocket, so
+  `networkidle` doesn't help. Tab switches and searches wait via `waitSettled`,
+  which polls a cheap grid *signature* (visible row count + first row text) and
+  proceeds once it has **changed from the pre-action state and held steady** for
+  two polls. This adapts to load (parallel contexts just wait a little longer)
+  and is what makes trimming the old fixed `waitForTimeout`s safe — a plain
+  row-count check is too weak because the previous tab/search also has rows.
 - **Browser**: launches the system Chrome via `channel: "chrome"` (the bundled
   Chromium download was unavailable here), falling back to bundled Chromium.
 
@@ -182,6 +193,11 @@ provider).
 - [x] Cache the filter/week reads (`src/cache.ts`, TTL `FILTERS_CACHE_TTL_HOURS`,
       default 24h, with in-flight dedupe). Bust via `POST /api/cache/clear`.
       Cold ~15s → cached ~20ms.
-- [ ] Speed up snapshots (per-player search is O(tabs×players); consider reading
-      full tab pages once instead of searching each player).
+- [x] Speed up snapshots: shard players across parallel browser contexts
+      (`SCRAPER_CONCURRENCY`, default 4) + adaptive `waitSettled` instead of fixed
+      sleeps. ~25-30 min → ~6-7 min for a 49-player, 12-tab snapshot.
+- [ ] Further snapshot speedup: per-player search is still O(tabs×players).
+      Reading full tab pages once would be O(tabs) but Moose's grid exposes no
+      SteamID column to map rows back to input players — blocked unless a hidden
+      per-row id is found.
 - [ ] Additional providers (RustyClash / Rustopia / …).
